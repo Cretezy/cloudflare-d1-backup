@@ -6,7 +6,7 @@ the
 to query for table definitions and data, then outputs SQL commands to recreate
 the database as-is.
 
-This script has only been tested on testing database. Please report any bugs
+This script has only been tested on small databases (~700KB). Please report any bugs
 using [GitHub Issues](https://github.com/Cretezy/cloudflare-d1-backup/issues).
 
 Based on
