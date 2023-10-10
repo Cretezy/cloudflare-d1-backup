@@ -29,8 +29,8 @@ To create a backup, you must obtain:
 
 This will create the backup at `backup.sql`.
 
-```cmd
-CLOUDFLARE_D1_API_KEY=... CLOUDFLARE_D1_ACCOUNT_ID=... CLOUDFLARE_D1_DATABASE_ID=... \
+```bash
+CLOUDFLARE_D1_ACCOUNT_ID=... CLOUDFLARE_D1_DATABASE_ID=... CLOUDFLARE_D1_API_KEY=... \
 npx @cretezy/cloudflare-d1-backup backup.sql
 ```
 
@@ -38,7 +38,7 @@ The CLI also supports reading from `.env`.
 
 ### Library
 
-```cmd
+```bash
 npm i @cretezy/cloudflare-d1-backup
 ```
 
@@ -56,14 +56,8 @@ const backup = await createBackup({
 
 ## Restoring a backup
 
-```cmd
+```bash
 npx wrangler d1 execute <database> --file=<backup.sql>
 ```
 
 `<database>` can be the ID or name of the D1 database.
-
-## License
-
-I would like to license this code as MIT, however I am waiting for the code this
-is based of to
-[add a license](https://github.com/nora-soderlund/cloudflare-d1-backups/issues/6).

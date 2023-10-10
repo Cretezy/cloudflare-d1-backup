@@ -1,12 +1,13 @@
 {
   "name": "@cretezy/cloudflare-d1-backup",
   "main": "dist/index.js",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "start": "ts-node-esm src/cli.ts"
+    "start": "ts-node-esm src/cli.ts",
+    "prepack": "pnpm build"
   },
   "bin": {
     "cloudflare-d1-backup": "./dist/cli.js"
