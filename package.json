@@ -1,0 +1,27 @@
+{
+  "name": "@cretezy/cloudflare-d1-backup",
+  "main": "dist/index.js",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "ts-node-esm src/cli.ts"
+  },
+  "bin": {
+    "cloudflare-d1-backup": "./dist/cli.js"
+  },
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "devDependencies": {
+    "@types/node": "^20.8.4",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "node-fetch": "^3.3.2"
+  }
+}
