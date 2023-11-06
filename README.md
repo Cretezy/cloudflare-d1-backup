@@ -6,8 +6,9 @@ the
 to query for table definitions and data, then outputs SQL commands to recreate
 the database as-is.
 
-This script has only been tested on small databases (~700KB). Please report any bugs
-using [GitHub Issues](https://github.com/Cretezy/cloudflare-d1-backup/issues).
+This script has only been tested on small databases (~700KB). Please report any
+bugs using
+[GitHub Issues](https://github.com/Cretezy/cloudflare-d1-backup/issues).
 
 Based on
 [nora-soderlund/cloudflare-d1-backups](https://github.com/nora-soderlund/cloudflare-d1-backups),
@@ -36,6 +37,10 @@ npx @cretezy/cloudflare-d1-backup backup.sql
 
 The CLI also supports reading from `.env`.
 
+You may also pass the `--limit` to add a LIMIT clause for each SELECT query.
+Default is 1000. You may need to lower if D1 crashes due to
+`Isolate Has exceeded Memory Size`. You can increase to speed up exports.
+
 ### Library
 
 ```bash
@@ -49,6 +54,8 @@ const backup = await createBackup({
   accountId: "...",
   databaseId: "...",
   apiKey: "...",
+  // Optional, see note above on --limit
+  limit: 1000,
 });
 ```
 
@@ -60,4 +67,4 @@ const backup = await createBackup({
 npx wrangler d1 execute <database> --file=<backup.sql>
 ```
 
-`<database>` can be the ID or name of the D1 database.
+`<database>` must be the ID or name of the D1 database.

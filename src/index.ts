@@ -1,14 +1,22 @@
 import fetch from "node-fetch";
 
-export async function createBackup(
-  options: { accountId: string; databaseId: string; apiKey: string },
-) {
+export async function createBackup(options: {
+  accountId: string;
+  databaseId: string;
+  apiKey: string;
+  // Default to 1000
+  limit?: number;
+}) {
+  const limit = options.limit ?? 1000;
   const lines: string[] = [];
   function append(command: string) {
     lines.push(command);
   }
 
-  async function fetchD1(sql: string, params?: unknown[]) {
+  async function fetchD1<T = Record<string, unknown>>(
+    sql: string,
+    params?: unknown[],
+  ) {
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${options.accountId}/d1/database/${options.databaseId}/query`,
       {
@@ -29,14 +37,13 @@ export async function createBackup(
       throw new Error(
         `D1 Error: ${body.errors
           .map((error: { message: string }) => error.message)
-          .join(", ")
-        }`,
+          .join(", ")}`,
       );
     }
 
     return body.result as {
       meta: {};
-      results: Record<string, unknown>[];
+      results: T[];
       success: boolean;
     }[];
   }
@@ -44,7 +51,7 @@ export async function createBackup(
   let writableSchema: boolean = false;
 
   {
-    const [tables] = await fetchD1(
+    const [tables] = await fetchD1<{ name: string; type: string; sql: string }>(
       "SELECT name, type, sql FROM sqlite_master WHERE sql IS NOT NULL AND type = 'table' ORDER BY name",
     );
 
@@ -53,7 +60,6 @@ export async function createBackup(
         console.warn(`Table name is not string: ${table.name}`);
         continue;
       }
-
       if (table.name.startsWith("_cf_")) {
         continue; // we're not allowed access to these
       } else if (table.name === "sqlite_sequence") {
@@ -75,8 +81,10 @@ export async function createBackup(
         const tableName = table.name.replace("'", "''");
 
         append(
-          `INSERT INTO sqlite_master (type, name, tbl_name, rootpage, sql) VALUES ('table', '${tableName}', '${tableName}', 0, '${table.sql.replace(/'/g, "''")
-          }');`,
+          `INSERT INTO sqlite_master (type, name, tbl_name, rootpage, sql) VALUES ('table', '${tableName}', '${tableName}', 0, '${table.sql.replace(
+            /'/g,
+            "''",
+          )}');`,
         );
 
         continue;
@@ -85,8 +93,9 @@ export async function createBackup(
         table.sql.toUpperCase().startsWith("CREATE TABLE ")
       ) {
         append(
-          `CREATE TABLE IF NOT EXISTS ${table.sql.substring("CREATE TABLE ".length)
-          };`,
+          `CREATE TABLE IF NOT EXISTS ${table.sql.substring(
+            "CREATE TABLE ".length,
+          )};`,
         );
       } else {
         append(`${table.sql};`);
@@ -106,47 +115,72 @@ export async function createBackup(
       if (tableRow.results[0]) {
         const columnNames = Object.keys(tableRow.results[0]);
 
-        const queries = [];
+        const [tableRowCount] = await fetchD1<{ count: number }>(
+          `SELECT COUNT(*) AS count FROM "${tableNameIndent}"`,
+        );
 
-        // D1 said maximum depth is 20, but the limit is seemingly at 9.
-        for (let index = 0; index < columnNames.length; index += 9) {
-          const currentColumnNames = columnNames.slice(
-            index,
-            Math.min(index + 9, columnNames.length),
-          );
-
-          queries.push(
-            `SELECT '${currentColumnNames.map((columnName) =>
-              `'||quote("${columnName.replace('"', '""')}")||'`
-            ).join(", ")
-            }' AS partialCommand FROM "${tableNameIndent}"`,
-          );
+        if (tableRowCount === null) {
+          throw new Error("Failed to get table row count from table.");
         }
 
-        const results = await fetchD1(queries.join(";"));
+        for (
+          let offset = 0;
+          offset <= tableRowCount.results[0].count;
+          offset += limit
+        ) {
+          const queries = [];
 
-        if (results.length && results[0].results.length) {
-          for (let result = 1; result < results.length; result++) {
-            if (
-              results[result].results.length !== results[0].results.length
-            ) {
-              throw new Error(
-                "Failed to split expression tree into several queries properly.",
-              );
-            }
+          // D1 said maximum depth is 20, but the limit is seemingly at 9.
+          for (let index = 0; index < columnNames.length; index += 9) {
+            const currentColumnNames = columnNames.slice(
+              index,
+              Math.min(index + 9, columnNames.length),
+            );
+
+            queries.push(
+              `SELECT '${currentColumnNames
+                .map(
+                  (columnName) =>
+                    `'||quote("${columnName.replace('"', '""')}")||'`,
+                )
+                .join(
+                  ", ",
+                )}' AS partialCommand FROM "${tableNameIndent}" LIMIT ${limit} OFFSET ${offset}`,
+            );
           }
 
-          for (let row = 0; row < results[0].results.length; row++) {
-            let columns = [];
+          const results = await fetchD1<{ partialCommand: string }>(
+            queries.join(";\n"),
+          );
 
-            for (let result = 0; result < results.length; result++) {
-              columns.push(results[result].results[row].partialCommand);
+          if (results.length && results[0].results.length) {
+            for (let result = 1; result < results.length; result++) {
+              if (
+                results[result].results.length !== results[0].results.length
+              ) {
+                throw new Error(
+                  "Failed to split expression tree into several queries properly.",
+                );
+              }
             }
 
-            append(
-              `INSERT INTO "${tableNameIndent}" (${columnNames.map((columnName) => `"${columnName}"`).join(", ")
-              }) VALUES (${columns.join(", ")});`,
-            );
+            for (let row = 0; row < results[0].results.length; row++) {
+              let columns: string[] = [];
+
+              for (let result = 0; result < results.length; result++) {
+                columns.push(
+                  results[result].results[row].partialCommand as string,
+                );
+              }
+
+              append(
+                `INSERT INTO "${tableNameIndent}" (${columnNames
+                  .map((columnName) => `"${columnName}"`)
+                  .join(", ")}) VALUES (${columns
+                  .map((column) => column.replace("\n", "\\n"))
+                  .join(", ")});`,
+              );
+            }
           }
         }
       }
