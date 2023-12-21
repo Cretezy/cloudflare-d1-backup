@@ -52,7 +52,7 @@ export async function createBackup(options: {
 
   {
     const [tables] = await fetchD1<{ name: string; type: string; sql: string }>(
-      "SELECT name, type, sql FROM sqlite_master WHERE sql IS NOT NULL AND type = 'table' ORDER BY name",
+      "SELECT name, type, sql FROM sqlite_master WHERE sql IS NOT NULL AND type = 'table' ORDER BY rootpage DESC",
     );
 
     for (let table of tables.results) {
