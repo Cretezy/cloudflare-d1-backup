@@ -32,11 +32,31 @@ if (limit <= 0) {
   process.exit(1);
 }
 
+// Validate required environment variables
+const accountId = process.env.CLOUDFLARE_D1_ACCOUNT_ID;
+const databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID;
+const apiKey = process.env.CLOUDFLARE_D1_API_KEY;
+
+if (!accountId) {
+  console.error("Error: CLOUDFLARE_D1_ACCOUNT_ID environment variable is required.");
+  process.exit(1);
+}
+if (!databaseId) {
+  console.error("Error: CLOUDFLARE_D1_DATABASE_ID environment variable is required.");
+  process.exit(1);
+}
+if (!apiKey) {
+  console.error("Error: CLOUDFLARE_D1_API_KEY environment variable is required.");
+  process.exit(1);
+}
+
 const backup = await createBackup({
-  accountId: process.env.CLOUDFLARE_D1_ACCOUNT_ID!,
-  databaseId: process.env.CLOUDFLARE_D1_DATABASE_ID!,
-  apiKey: process.env.CLOUDFLARE_D1_API_KEY!,
+  accountId,
+  databaseId,
+  apiKey,
   limit,
+  onProgress: (message) => console.log(message),
 });
 
+console.log(`\nBackup written to: ${path}`);
 fs.writeFileSync(path, backup);

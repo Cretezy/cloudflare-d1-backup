@@ -6,12 +6,20 @@ export async function createBackup(options: {
   apiKey: string;
   // Default to 1000
   limit?: number;
+  // Optional progress logger function
+  onProgress?: (message: string) => void;
 }) {
   const limit = options.limit ?? 1000;
   const lines: string[] = [];
   function append(command: string) {
     lines.push(command);
   }
+
+  const log = (message: string) => {
+    if (options.onProgress) {
+      options.onProgress(message);
+    }
+  };
 
   async function fetchD1<T = Record<string, unknown>>(
     sql: string,
@@ -51,9 +59,13 @@ export async function createBackup(options: {
   let writableSchema: boolean = false;
 
   {
+    log("Fetching table definitions...");
     const [tables] = await fetchD1<{ name: string; type: string; sql: string }>(
       "SELECT name, type, sql FROM sqlite_master WHERE sql IS NOT NULL AND type = 'table' ORDER BY rootpage DESC",
     );
+
+    log(`Found ${tables.results.length} tables`);
+    let tableIndex = 0;
 
     for (let table of tables.results) {
       if (typeof table.name !== "string") {
@@ -62,7 +74,12 @@ export async function createBackup(options: {
       }
       if (table.name.startsWith("_cf_")) {
         continue; // we're not allowed access to these
-      } else if (table.name === "sqlite_sequence") {
+      }
+
+      tableIndex++;
+      log(`[${tableIndex}/${tables.results.length}] Processing table: ${table.name}`);
+
+      if (table.name === "sqlite_sequence") {
         append("DELETE FROM sqlite_sequence;");
       } else if (table.name === "sqlite_stat1") {
         append("ANALYZE sqlite_master;");
@@ -123,11 +140,21 @@ export async function createBackup(options: {
           throw new Error("Failed to get table row count from table.");
         }
 
+        const totalRows = tableRowCount.results[0].count;
+        if (totalRows > 0) {
+          log(`  Exporting ${totalRows} rows from ${table.name}...`);
+        }
+
+        let processedRows = 0;
         for (
           let offset = 0;
-          offset <= tableRowCount.results[0].count;
+          offset <= totalRows;
           offset += limit
         ) {
+          if (totalRows > limit && processedRows > 0) {
+            log(`    Progress: ${processedRows}/${totalRows} rows (${Math.round((processedRows / totalRows) * 100)}%)`);
+          }
+
           const queries = [];
 
           // D1 said maximum depth is 20, but the limit is seemingly at 9.
@@ -181,6 +208,8 @@ export async function createBackup(options: {
                   .join(", ")});`,
               );
             }
+
+            processedRows += results[0].results.length;
           }
         }
       }
@@ -188,11 +217,13 @@ export async function createBackup(options: {
   }
 
   {
+    log("Processing indexes, triggers, and views...");
     const [schemas] = await fetchD1(
       "SELECT name, type, sql FROM sqlite_master WHERE sql IS NOT NULL AND type IN ('index', 'trigger', 'view')",
     );
 
     if (schemas.results.length) {
+      log(`Found ${schemas.results.length} indexes/triggers/views`);
       for (let schema of schemas.results) {
         append(`${schema.sql};`);
       }
@@ -202,6 +233,8 @@ export async function createBackup(options: {
   if (writableSchema) {
     append("PRAGMA writable_schema=OFF;");
   }
+
+  log("Backup completed successfully!");
 
   return lines.join("\n");
 }
